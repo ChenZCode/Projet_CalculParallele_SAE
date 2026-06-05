@@ -1,0 +1,10 @@
+1_ Fait
+
+2_ Les boucles principales sont le triple for imbriqué puis le double for 
+qui compte le nombre de sains, infectés et guéris
+
+3_ Les données lues sonts la taille du tableau et le tableau A,  les données
+écrites sont le tableau B et les compteurs c0, c1 et c2
+
+4_ le calcul peut etre parallelisé car il n'y a aucune dépendance entre les variables
+ainsi les 2 boucles for imbriqués peuvent être parallélisés avec OpenMP ou MPI
