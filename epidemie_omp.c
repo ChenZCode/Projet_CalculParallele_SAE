@@ -4,17 +4,20 @@
 #include <omp.h>
 
 #ifndef N
-#define N 300
+#define N 8312 
+/* #define N 8312 pour avoir des chiffres semblables à la population française.
+ * Pour avoir des temps plus pratiques à tester, on prendre N = 2000
+ */
 #endif
 
 #ifndef ITER
-#define ITER 200
+#define ITER 500
 #endif
 
 #define IDX(i,j) ((i)*N + (j))
 
 static double wtime(void) {
-    return (double)clock() / CLOCKS_PER_SEC;
+    return omp_get_wtime();
 }
 
 /* Données du programme :
@@ -26,6 +29,9 @@ static double wtime(void) {
  */
 
 int main(void) {
+    // Nombre de threads à utiliser
+    omp_set_num_threads(8);
+
     // Allocation des tableaux
     int *A = malloc((size_t)N*N*sizeof(int));
     int *B = malloc((size_t)N*N*sizeof(int));
@@ -36,6 +42,7 @@ int main(void) {
     }
 
     // Boucle de remplissage des tableaux
+    #pragma omp parallel for
     for(int i=0;i<N;i++) {
         for(int j=0;j<N;j++) {
             A[IDX(i,j)] = 0;
@@ -48,18 +55,16 @@ int main(void) {
     A[IDX(N/2,N/2+1)] = 1;
     A[IDX(N/2+1,N/2)] = 1;
 
-    // Nombre de threads à utiliser
-    omp_set_num_threads(2);
-
     // Début de la prise de temps
     double t0 = wtime();
 
     // Boucle principale de traitement
-    // On boucle ITER = 200 fois
+    // On boucle ITER fois
     for(int it=0; it<ITER; it++) {
-        // On boucle sur une dimension du tableau ie 300 fois
+        // On boucle sur une dimension du tableau ie N fois
+        #pragma omp parallel for
         for(int i=1;i<N-1;i++) {
-            // On boucle sur l'autre dimension du tableau ie 300 fois
+            // On boucle sur l'autre dimension du tableau ie N fois
             for(int j=1;j<N-1;j++) {
                 int v = A[IDX(i,j)];
                 // Si la personne courante est saine
@@ -98,7 +103,11 @@ int main(void) {
     for(int i=0;i<N;i++) {
 
         // Deuxième dimension du parcours
-        // #pragma omp parallel for
+        /* #pragma omp parallel for
+         * En conservant la directive ci-dessus, on garde des temps d'exécution équivalents
+         * On décide quand même de la retirer car à priori, la parallélisation
+         * supplémentaire devrait rajouter du temps d'exécution
+         */
         for(int j=0;j<N;j++) {
             if(A[IDX(i,j)] == 0) c0++;
             else if(A[IDX(i,j)] == 1) c1++;
@@ -116,3 +125,27 @@ int main(void) {
     free(B);
     return 0;
 }
+
+/* 
+Résultats moyens à mettre dans le rapport (pour N = 2000 et ITER = 500):
+Avec 1 thread : 9,333s
+Avec 2 threads : 4,998s
+Avec 4 threads : 6,076s
+Avec 8 threads : 3,003s
+
+s(1) = 1
+s(2) = 1,867
+s(4) = 1,536
+s(8) = 3,108
+
+Pour 69 089 340 personnes et 500 itérations (environ la population française) : 
+Avec 1 thread : 2min 33s
+Avec 2 threads : 1min 30s
+Avec 4 threads : 1min 17s
+Avec 8 threads : 48s
+
+s(1) = 1
+s(2) = 1,7
+s(4) = 1,99
+s(8) = 3,19
+*/
