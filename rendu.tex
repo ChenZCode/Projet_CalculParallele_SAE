@@ -2,16 +2,14 @@
 
 \usepackage[french]{babel}
 \usepackage{graphicx}
-\usepackage{lipsum}
 \usepackage{fancyhdr}
-\usepackage{listings}
-\usepackage{xcolor}
-\usepackage{minted}
-\usepackage{amsmath}
 \usepackage{hyperref}
-\usepackage{tcolorbox}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{microtype}
+\usepackage{enumitem}
+\usepackage{titlesec}
 \usepackage{lmodern}
-
 
 \hypersetup{
 	colorlinks=true,
@@ -20,19 +18,21 @@
 	citecolor=blue
 }
 
-
-
 \pagestyle{fancy}
 \fancyhf{}
 
-
 \fancyfoot[R]{\includegraphics[width=1.3cm]{logo.png}}
-
 \fancyfoot[C]{\thepage}
-
 \renewcommand{\sectionmark}[1]{\markboth{#1}{}}
-
 \fancyfoot[L]{\nouppercase{\leftmark}}
+\setlength{\footskip}{45pt}
+\setlength{\parskip}{0.9\baselineskip}
+\setlength{\parindent}{0pt}
+\setlist[itemize]{itemsep=6pt,parsep=4pt,left=1.5em}
+
+% Subsection: smaller font and reduced vertical spacing
+\titleformat{\subsection}[hang]{\normalfont\normalsize\bfseries}{\thesubsection}{0.5em}{}
+\titlespacing{\subsection}{0pt}{0pt}{0.3em}
 
 \begin{document}
 
@@ -41,15 +41,15 @@
 	\centering
 	\includegraphics[width=4cm]{logo.png} \\[1cm]
 
-	{\LARGE \textbf{Projet parrallélisme}} \\[0.5cm]
-    
-	{\large Avec l'utilisation d'openMp et MPI} \\[1.5cm]
+	{\LARGE \textbf{Projet parallelisme}} \\[0.5cm]
+
+	{\large Avec l'utilisation d'OpenMP et MPI} \\[1.5cm]
 
 	\textbf{Auteurs :} \\[0.3cm]
 	Chennouf Ziyad\\
 	Honor de Mathis \\
 	NADAUD Antonin \\
-	Belkadi Farès \\[1cm]
+	Belkadi Fares \\[1cm]
 
 	\textbf{Encadrant :} \\[0.3cm]
 	GARCIA Thierry \\[1.5cm]
@@ -59,8 +59,7 @@
 
 	\vfill
 
-	{\large CY Tech – ing1 - électif 1} \\
-
+	{\large CY Tech - ing1 - electif 1} \\
 \end{titlepage}
 
 % --- page blanche ---
@@ -70,110 +69,29 @@
 
 % ---- Sommaire ----
 \newpage
-\renewcommand{\contentsname}{Sommaire}  
-\tableofcontents 
+\renewcommand{\contentsname}{Sommaire}
+\tableofcontents
 
-% ---- introduction --- 
-\newpage
-\section{Introduction}
-\lipsum[1]
-
-\begin{equation}
-	E = mc^2
-	\label{eq:einstein}
-\end{equation}
-
-
-
-
-
-
-
-
-\section{Objectif}
-
-\lipsum[2]
-
-\begin{minted}[frame=single, bgcolor=white, linenos]{python}
-def factorial(n):
-	if n == 0:
-    	return 1
-	else:
-    	return n * factorial(n-1)
-
-print(factorial(5))
-\end{minted}
-
-\subsection{Test}
-
-\begin{tcolorbox}[colback=gray!20, colframe=black, colframe=white,sharp corners]
-\textbf{Ceci est une boîte} avec un fond gris clair et un titre qui reprend la numérotation de la section. \par
-\hspace{2em}  \lipsum[1]
-
-\end{tcolorbox}
-
-\par
-\vspace{1em}
-
-\indent \textbf{Test aa} \lipsum[2] \par
-
-\begin{minted}[frame=single, bgcolor=white, linenos]{python}
-def factorial(n):
-	if n == 0:
-    	return 1
-	else:
-    	return n * factorial(n-1)
-
-print(factorial(5))
-\end{minted}
-
-\subsection{Détails techniques}
-\lipsum[3]
-
-
-
-
-
-
-\section{Théorie sous-jacente}
-\lipsum[4]
-
-Référence à l'équation d'Einstein: \eqref{eq:einstein}
-
-
-
-
-
-\section{Méthode(s)}
-\lipsum[5]
-
-
-
-
-
-\section{Résultats}
-
-\lipsum[5]
+% ---- Partie 1 ----
 \newpage
 
-\section{Analyse}
+\section{Compréhension du code séquentiel}
 
-\lipsum[5]
+\subsection{Compilation et exécution}
+Le code séquentiel fourni a été compilé et exécuté avec succès. Cette exécution fournit le temps d'exécution de référence, nécessaire pour mesurer le gain de performance (\textit{speedup}) des versions parallèles.
 
-\newpage
+\subsection{Boucle principale de calcul}
+La boucle temporelle principale est \texttt{for (int it = 0; it < ITER; ++it)}. À l'intérieur se trouve une double boucle spatiale (indices \texttt{i} et \texttt{j}, de 1 à $N-1$) qui met à jour les cellules de la grille à chaque itération.
 
-\section{Bibliographie}
-
-Voici la liste:
-
-\vspace{1em}
-
+\subsection{Données lues et écrites}
+Durant la phase de calcul :
 \begin{itemize}
-	\item \href{https://www.example.com}{Exemple 1}
-	\item \href{https://www.google.com}{Google}
-	\item \href{https://www.wikipedia.org}{Wikipedia}
+	\item \textbf{Lues :} l'état courant \texttt{A[IDX(i,j)]} et l'état des quatre voisins (haut, bas, gauche, droite).
+	\item \textbf{Écrites :} la nouvelle valeur de la cellule dans \texttt{B[IDX(i,j)]}.
 \end{itemize}
+Note : à la fin de chaque pas temporel, les rôles/ponteurs de \texttt{A} et \texttt{B} sont échangés.
+
+\subsection{Potentiel de parallélisation}
+La mise à jour de \texttt{B[IDX(i,j)]} dépend uniquement des valeurs lues dans \texttt{A} (lecture seule pendant l'itération spatiale). Il n'y a donc pas de dépendance entre deux itérations distinctes sur \texttt{i},\texttt{j}. Les boucles spatiales peuvent donc être parallélisées via OpenMP (\texttt{#pragma omp parallel for}) ou distribuées par domaines avec MPI.
 
 \end{document}
-
-
