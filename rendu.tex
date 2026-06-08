@@ -2,14 +2,16 @@
 
 \usepackage[french]{babel}
 \usepackage{graphicx}
+\usepackage{lipsum}
 \usepackage{fancyhdr}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{minted}
+\usepackage{amsmath}
 \usepackage{hyperref}
-\usepackage[T1]{fontenc}
-\usepackage[utf8]{inputenc}
-\usepackage{microtype}
-\usepackage{enumitem}
-\usepackage{titlesec}
+\usepackage{tcolorbox}
 \usepackage{lmodern}
+
 
 \hypersetup{
 	colorlinks=true,
@@ -18,21 +20,19 @@
 	citecolor=blue
 }
 
+
+
 \pagestyle{fancy}
 \fancyhf{}
 
-\fancyfoot[R]{\includegraphics[width=1.3cm]{logo.png}}
-\fancyfoot[C]{\thepage}
-\renewcommand{\sectionmark}[1]{\markboth{#1}{}}
-\fancyfoot[L]{\nouppercase{\leftmark}}
-\setlength{\footskip}{45pt}
-\setlength{\parskip}{0.9\baselineskip}
-\setlength{\parindent}{0pt}
-\setlist[itemize]{itemsep=6pt,parsep=4pt,left=1.5em}
 
-% Subsection: smaller font and reduced vertical spacing
-\titleformat{\subsection}[hang]{\normalfont\normalsize\bfseries}{\thesubsection}{0.5em}{}
-\titlespacing{\subsection}{0pt}{0pt}{0.3em}
+\fancyfoot[R]{\includegraphics[width=1.3cm]{logo.png}}
+
+\fancyfoot[C]{\thepage}
+
+\renewcommand{\sectionmark}[1]{\markboth{#1}{}}
+
+\fancyfoot[L]{\nouppercase{\leftmark}}
 
 \begin{document}
 
@@ -41,15 +41,15 @@
 	\centering
 	\includegraphics[width=4cm]{logo.png} \\[1cm]
 
-	{\LARGE \textbf{Projet parallelisme}} \\[0.5cm]
-
-	{\large Avec l'utilisation d'OpenMP et MPI} \\[1.5cm]
+	{\LARGE \textbf{Projet parrallélisme}} \\[0.5cm]
+    
+	{\large Avec l'utilisation d'OpenMP et OpenMPI} \\[1.5cm]
 
 	\textbf{Auteurs :} \\[0.3cm]
-	Chennouf Ziyad\\
-	Honor de Mathis \\
-	NADAUD Antonin \\
-	Belkadi Fares \\[1cm]
+    BELKADI Farès \\
+	CHENNOUF Ziyad \\
+	GAYON Mathis \\
+	NADAUD Antonin \\[1cm]
 
 	\textbf{Encadrant :} \\[0.3cm]
 	GARCIA Thierry \\[1.5cm]
@@ -59,7 +59,8 @@
 
 	\vfill
 
-	{\large CY Tech - ing1 - electif 1} \\
+	{\large CY Tech – Ing1 - Electif 1} \\
+
 \end{titlepage}
 
 % --- page blanche ---
@@ -69,10 +70,29 @@
 
 % ---- Sommaire ----
 \newpage
-\renewcommand{\contentsname}{Sommaire}
-\tableofcontents
+\renewcommand{\contentsname}{Sommaire}  
+\tableofcontents 
 
-% ---- Partie 1 ----
+% ---- introduction --- 
+\newpage
+\section{Introduction}
+\lipsum[1]
+
+\begin{equation}
+	E = mc^2
+	\label{eq:einstein}
+\end{equation}
+
+
+
+
+
+
+
+
+\section{Compréhension séquentielle}
+
+\lipsum[2]
 \newpage
 
 \section{Compréhension du code séquentiel}
@@ -93,5 +113,150 @@ Note : à la fin de chaque pas temporel, les rôles/ponteurs de \texttt{A} et \t
 
 \subsection{Potentiel de parallélisation}
 La mise à jour de \texttt{B[IDX(i,j)]} dépend uniquement des valeurs lues dans \texttt{A} (lecture seule pendant l'itération spatiale). Il n'y a donc pas de dépendance entre deux itérations distinctes sur \texttt{i},\texttt{j}. Les boucles spatiales peuvent donc être parallélisées via OpenMP (\texttt{#pragma omp parallel for}) ou distribuées par domaines avec MPI.
+
+
+\begin{minted}[frame=single, bgcolor=white, linenos]{python}
+def factorial(n):
+	if n == 0:
+    	return 1
+	else:
+    	return n * factorial(n-1)
+
+print(factorial(5))
+\end{minted}
+
+\subsection{Test}
+
+\begin{tcolorbox}[colback=gray!20, colframe=black, colframe=white,sharp corners]
+\textbf{Ceci est une boîte} avec un fond gris clair et un titre qui reprend la numérotation de la section. \par
+\hspace{2em}  \lipsum[1]
+
+\end{tcolorbox}
+
+\par
+\vspace{1em}
+
+\indent \textbf{Test aa} \lipsum[2] \par
+
+\begin{minted}[frame=single, bgcolor=white, linenos]{python}
+def factorial(n):
+	if n == 0:
+    	return 1
+	else:
+    	return n * factorial(n-1)
+
+print(factorial(5))
+\end{minted}
+
+\subsection{Détails techniques}
+\lipsum[3]
+
+
+
+
+
+
+\section{Parallélisation avec OpenMP}
+
+\subsection{Modifications du code}
+Afin de réaliser notre parallélisation, nous utilisons les directives de la bibliothèque \textbf{omp.h}.
+Nous avons identifié les boucles parallélisables de notre code en amont afin d'éviter des résultats incohérents. Voici ci-dessous les parties du code ayant été modifiées :
+\begin{minted}[frame=single, bgcolor=white, linenos]{c}
+// Boucle de remplissage des tableaux                                       
+#pragma omp parallel for
+for(int i=0;i<N;i++) {
+    for(int j=0;j<N;j++) {
+        A[IDX(i,j)] = 0;
+        B[IDX(i,j)] = 0;
+    }
+}
+\end{minted}
+\begin{minted}[frame=single, bgcolor=white, linenos]{c}
+// Boucle principale de traitement
+// On boucle ITER fois
+for(int it=0; it<ITER; it++) {
+    // On boucle sur une dimension du tableau ie N fois
+    #pragma omp parallel for
+    for(int i=1;i<N-1;i++) {
+
+    ...
+
+    // On inverse A et B pour que A soit le tableau final
+    int *tmp = A;
+    A = B;
+    B = tmp;
+}
+\end{minted}
+\begin{minted}[frame=single, bgcolor=white, linenos]{c}
+// Première dimension du comptage des individus
+#pragma omp parallel for reduction(+:c0,c1,c2)
+for(int i=0;i<N;i++) {
+
+    // Deuxième dimension du parcours
+    for(int j=0;j<N;j++) {
+        if(A[IDX(i,j)] == 0) c0++;
+        else if(A[IDX(i,j)] == 1) c1++;
+        else c2++;
+    }
+}
+\end{minted}
+La boucle du premier cadre permet seulement de remplir le tableau utilisé pour représenter la population étudiée. On peut paralléliser cette opération car l'ordre de remplissage du tableau n'importe pas.
+\\\\
+La boucle du second cadre correspond à l'opération de propagation de la maladie. La parallélisation est rendue possible par l'utilisation de deux tableaux différents. Le tableau A sert à la lecture des valeurs tandis que le tableau B sert à l'écriture des valeurs. Ainsi, il n'y a aucun conflitdans l'ordre de mise à jour des valeurs.
+\\\\
+Enfin, le dernier cadre agit sur le calcul du nombre de personnes saines, infectées et guéries. On utilise une réduction pour que les threads somment les valeurs à la fin de la parallélisation.
+En effet, sans la directive de réduction, on observe des individus manquants dans le résultat.
+
+\subsection{Temps d'exécution et speedup}
+Dans un premier temps, nous avons réalisé des mesures sur une population relativement faible de 4 000 000 de personnes. Cela nous permet d'avoir une idée de l'efficacité de la parallélisation sur de petites populations. Le nombre d'itérations est fixé à 500, on pourrait donc dire que l'on étudie l'épidémie sur 500 jours.\\\\
+\begin{tabular}{|l|c|r|} %create a table 
+    \hline
+    \textbf{Threads}&\textbf{Temps d'exécution}&\textbf{Speedup}\\ \hline
+    1 & 9,333s & 1\\ \hline
+    2 & 4,998s & 1,867\\ \hline
+    4 & 6,076s & 1,536\\ \hline
+    8 & 3,003s & 3,108\\ \hline
+\end{tabular} \\\\
+
+Dans un second temps, nous avons réalisé notre simulation sur une population environ égale à celle de la France (69 089 340). Ainsi, nous voyons quel temps une simulation prendrait à l'échelle du pays, bien que le modèle de propagation soit très simple.\\\\
+\begin{tabular}{|l|c|r|} %create a table 
+    \hline
+    \textbf{Threads}&\textbf{Temps d'exécution}&\textbf{Speedup}\\ \hline
+    1 & 2min 33s & 1\\ \hline
+    2 & 1min 30s & 1,7\\ \hline
+    4 & 1min 17s & 1,99\\ \hline
+    8 & 48s & 3,19\\ \hline
+\end{tabular} \\\\
+
+
+\section{Parallélisation avec OpenMPI}
+\lipsum[5]
+
+
+
+
+
+\section{Analyse des résultats}
+
+\lipsum[5]
+\newpage
+
+\section{Conclusion}
+
+\lipsum[5]
+
+\newpage
+
+\section{Bibliographie}
+
+Voici la liste:
+
+\vspace{1em}
+
+\begin{itemize}
+	\item \href{https://www.insee.fr/fr/statistiques/8721456}{INSEE}
+	\item \href{https://www.google.com}{Google}
+	\item \href{https://www.wikipedia.org}{Wikipedia}
+\end{itemize}
 
 \end{document}
