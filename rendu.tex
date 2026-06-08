@@ -1,0 +1,179 @@
+\documentclass[a4paper,12pt]{article}
+
+\usepackage[french]{babel}
+\usepackage{graphicx}
+\usepackage{lipsum}
+\usepackage{fancyhdr}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{minted}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage{tcolorbox}
+\usepackage{lmodern}
+
+
+\hypersetup{
+	colorlinks=true,
+	linkcolor=blue,
+	urlcolor=blue,
+	citecolor=blue
+}
+
+
+
+\pagestyle{fancy}
+\fancyhf{}
+
+
+\fancyfoot[R]{\includegraphics[width=1.3cm]{logo.png}}
+
+\fancyfoot[C]{\thepage}
+
+\renewcommand{\sectionmark}[1]{\markboth{#1}{}}
+
+\fancyfoot[L]{\nouppercase{\leftmark}}
+
+\begin{document}
+
+% ---- Page de titre ----
+\begin{titlepage}
+	\centering
+	\includegraphics[width=4cm]{logo.png} \\[1cm]
+
+	{\LARGE \textbf{Projet parrallélisme}} \\[0.5cm]
+    
+	{\large Avec l'utilisation d'openMp et MPI} \\[1.5cm]
+
+	\textbf{Auteurs :} \\[0.3cm]
+	Chennouf Ziyad\\
+	Honor de Mathis \\
+	NADAUD Antonin \\
+	Belkadi Farès \\[1cm]
+
+	\textbf{Encadrant :} \\[0.3cm]
+	GARCIA Thierry \\[1.5cm]
+
+	\textbf{\today}
+	\\[2cm]
+
+	\vfill
+
+	{\large CY Tech – ing1 - électif 1} \\
+
+\end{titlepage}
+
+% --- page blanche ---
+\newpage
+\thispagestyle{empty}
+\mbox{}
+
+% ---- Sommaire ----
+\newpage
+\renewcommand{\contentsname}{Sommaire}  
+\tableofcontents 
+
+% ---- introduction --- 
+\newpage
+\section{Introduction}
+\lipsum[1]
+
+\begin{equation}
+	E = mc^2
+	\label{eq:einstein}
+\end{equation}
+
+
+
+
+
+
+
+
+\section{Objectif}
+
+\lipsum[2]
+
+\begin{minted}[frame=single, bgcolor=white, linenos]{python}
+def factorial(n):
+	if n == 0:
+    	return 1
+	else:
+    	return n * factorial(n-1)
+
+print(factorial(5))
+\end{minted}
+
+\subsection{Test}
+
+\begin{tcolorbox}[colback=gray!20, colframe=black, colframe=white,sharp corners]
+\textbf{Ceci est une boîte} avec un fond gris clair et un titre qui reprend la numérotation de la section. \par
+\hspace{2em}  \lipsum[1]
+
+\end{tcolorbox}
+
+\par
+\vspace{1em}
+
+\indent \textbf{Test aa} \lipsum[2] \par
+
+\begin{minted}[frame=single, bgcolor=white, linenos]{python}
+def factorial(n):
+	if n == 0:
+    	return 1
+	else:
+    	return n * factorial(n-1)
+
+print(factorial(5))
+\end{minted}
+
+\subsection{Détails techniques}
+\lipsum[3]
+
+
+
+
+
+
+\section{Théorie sous-jacente}
+\lipsum[4]
+
+Référence à l'équation d'Einstein: \eqref{eq:einstein}
+
+
+
+
+
+\section{Méthode(s)}
+\lipsum[5]
+
+
+
+
+
+\section{Résultats}
+
+\lipsum[5]
+\newpage
+
+\section{Analyse}
+
+\lipsum[5]
+
+\newpage
+
+\section{Bibliographie}
+
+Voici la liste:
+
+\vspace{1em}
+
+\begin{itemize}
+	\item \href{https://www.example.com}{Exemple 1}
+	\item \href{https://www.google.com}{Google}
+	\item \href{https://www.wikipedia.org}{Wikipedia}
+\end{itemize}
+
+\end{document}
+
+

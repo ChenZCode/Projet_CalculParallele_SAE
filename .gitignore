@@ -1,0 +1,8 @@
+.vscode
+_minted-rendu
+
+*.out
+*.aux
+*.pyg
+*.toc
+*.log
