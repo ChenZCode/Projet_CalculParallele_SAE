@@ -11,6 +11,25 @@
 \usepackage{hyperref}
 \usepackage{tcolorbox}
 \usepackage{lmodern}
+\usepackage{xcolor}
+\usepackage{listings}
+
+\definecolor{codegray}{rgb}{0.96,0.96,0.96}
+\lstset{
+	language=C,
+	backgroundcolor=\color{codegray},
+	basicstyle=\ttfamily\small,
+	keywordstyle=\color{blue},
+	commentstyle=\color{gray},
+	numbers=left,
+	numberstyle=\tiny\color{gray},
+	stepnumber=1,
+	numbersep=8pt,
+	frame=single,
+	breaklines=true,
+	showstringspaces=false,
+	tabsize=4
+}
 
 
 \hypersetup{
@@ -113,7 +132,6 @@ Note : à la fin de chaque pas temporel, les rôles/ponteurs de \texttt{A} et \t
 
 \subsection{Potentiel de parallélisation}
 La mise à jour de \texttt{B[IDX(i,j)]} dépend uniquement des valeurs lues dans \texttt{A} (lecture seule pendant l'itération spatiale). Il n'y a donc pas de dépendance entre deux itérations distinctes sur \texttt{i},\texttt{j}. Les boucles spatiales peuvent donc être parallélisées via OpenMP (\texttt{#pragma omp parallel for}) ou distribuées par domaines avec MPI.
-
 
 \begin{minted}[frame=single, bgcolor=white, linenos]{python}
 def factorial(n):
