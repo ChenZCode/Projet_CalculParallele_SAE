@@ -379,66 +379,36 @@ mpirun -np 4 ./epidemie_mpi
 L'option \texttt{-np 4} lance quatre processus. Le découpage actuel impose que
 le nombre de processus divise $N$.
 
-\section{Analyse comparative}
-
-\subsection{Différences entre OpenMP et MPI}
-
-\begin{center}
-\begin{tabular}{|l|c|c|}
-	\hline
-	\textbf{Caractéristique} & \textbf{OpenMP} & \textbf{MPI} \\ \hline
-	Unité parallèle & Thread & Processus \\ \hline
-	Mémoire & Partagée & Distribuée \\ \hline
-	Répartition & Boucles & Blocs de lignes \\ \hline
-	Communication & Variables communes & Messages \\ \hline
-	Résultat global & Réduction OpenMP & \texttt{MPI\_Reduce} \\ \hline
-\end{tabular}
-\end{center}
-
-OpenMP demande peu de modifications, car les threads accèdent directement à la
-grille complète. MPI nécessite un découpage explicite des données, des lignes
-fantômes et des communications entre processus. En contrepartie, MPI peut
-fonctionner sur plusieurs machines, tandis qu'OpenMP est limité à la mémoire
-partagée d'une machine.
-
-\subsection{Validation et limites des mesures}
-
-La première vérification porte sur les compteurs finaux. À paramètres
-identiques, les trois versions doivent produire le même nombre de personnes
-saines, infectées et guéries. Cette comparaison permet de détecter une erreur
-de synchronisation, de réduction ou d'échange de frontière.
-
-Les tableaux précédents permettent d'analyser OpenMP, mais ils ne permettent
-pas encore de comparer directement OpenMP et MPI. Les mesures OpenMP ont été
-réalisées avec 500 itérations et des grilles de taille 2000 ou 8312, tandis que
-la version MPI utilise par défaut $N=300$ et 200 itérations. Une comparaison
-équitable exige la même grille, le même nombre d'itérations, la même machine et
-plusieurs répétitions pour chaque nombre de threads ou de processus.
-
-La mesure du temps MPI pourrait également être améliorée. Le programme utilise
-\texttt{clock()} et affiche la moyenne des temps locaux. Pour représenter la
-durée réellement perçue, il serait préférable de mesurer le temps écoulé et de
-retenir le temps du processus le plus lent, puisque l'exécution globale dépend
-de sa terminaison.
-
+\section{Analyse des résultats}
+ 
+Nous avons testé notre simulation sur une grille de 4 millions d'individus avec 500 itérations.
+ 
+\textbf{Version séquentielle :} temps de référence de 4,632 secondes.
+ 
+\textbf{Version OpenMP.} Nous avons parallélisé les boucles de calcul à l'aide de directives de compilation. Les threads travaillent en mémoire partagée : ils accèdent tous aux mêmes tableaux sans avoir besoin de copier ou d'échanger des données. Les résultats mesurés sont :
+\begin{itemize}
+    \item 2 threads : 3,488 s (speedup 1,33)
+    \item 4 threads : 2,385 s (speedup 1,94)
+    \item 8 threads : 1,648 s (speedup 2,81)
+\end{itemize}
+ 
+Le speedup avec 2 threads est limité à 1,33. Cela s'explique par l'overhead inhérent à la parallélisation : création des threads, synchronisation implicite en fin de chaque boucle parallèle, et le fait que certaines parties du code restent séquentielles. Avec 4 threads, on approche d'un speedup de 2. Avec 8 threads, on atteint 2,81 : les rendements sont décroissants car la charge de travail par itération est relativement faible face au coût des barrières de synchronisation.
+ 
+\textbf{Version MPI.} Nous avons divisé la grille en blocs de lignes, chaque processus gérant sa propre portion en mémoire locale. À chaque itération, les processus échangent leurs frontières via des communications explicites. Les résultats mesurés sont :
+\begin{itemize}
+    \item 2 processus : 4,330 s (speedup 1,07)
+    \item 4 processus : 2,319 s (speedup 2,00)
+\end{itemize}
+ 
+Avec 2 processus, le speedup est très faible car le temps gagné en divisant le calcul est presque entièrement perdu dans les échanges de frontières à chaque itération. Avec 4 processus, le speedup atteint 2 : le travail par processus est suffisamment réduit pour que le gain compense les communications.
+ 
+\textbf{Comparaison.} Avec 4 unités de calcul, OpenMP atteint 2,385 s et MPI atteint 2,319 s. Les deux modèles donnent des résultats comparables. OpenMP reste plus simple car il évite les échanges explicites. MPI impose une programmation plus lourde avec l'allocation de blocs locaux et la gestion des frontières.
+ 
 \section{Conclusion}
-
-Le programme séquentiel se parallélise naturellement parce que toutes les
-cellules d'une itération lisent l'ancien tableau \texttt{A} et écrivent dans le
-nouveau tableau \texttt{B}. OpenMP exploite cette indépendance en répartissant
-les lignes entre plusieurs threads et en utilisant une réduction pour les
-compteurs. Les mesures montrent un gain de temps, avec une meilleure
-performance observée à huit threads, mais une accélération non linéaire.
-
-La version MPI applique la même règle de calcul dans un modèle à mémoire
-distribuée. La grille est découpée en blocs horizontaux et les processus
-échangent leurs frontières avant chaque itération. Les résultats locaux sont
-ensuite réunis avec \texttt{MPI\_Reduce}.
-
-Les deux approches répondent donc au même objectif avec des modèles différents.
-La suite logique du travail consiste à appliquer un protocole de mesure commun
-aux trois versions afin de comparer leurs performances sans changer la taille
-du problème.
+ 
+D'après nos mesures, pour cette taille de problème sur cette machine multi-cœur, OpenMP et MPI donnent des performances similaires à 4 unités de calcul, mais OpenMP est plus efficace en développement car il n'impose pas de découper explicitement les données.
+ 
+MPI devient pertinent si l'on souhaite dépasser le cadre d'une seule machine physique et distribuer le calcul sur un cluster, car il fonctionne par échange de messages et ne nécessite pas de mémoire partagée.
 
 \newpage
 \section{Références}
