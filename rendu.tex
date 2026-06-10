@@ -1,5 +1,6 @@
 \documentclass[a4paper,12pt]{article}
 
+\usepackage[T1]{fontenc}
 \usepackage[french]{babel}
 \usepackage{graphicx}
 \usepackage{lipsum}
@@ -48,6 +49,7 @@
 \fancyfoot[R]{\includegraphics[width=1.3cm]{logo.png}}
 
 \fancyfoot[C]{\thepage}
+\setlength{\footskip}{42pt}
 
 \renewcommand{\sectionmark}[1]{\markboth{#1}{}}
 
@@ -128,10 +130,10 @@ Durant la phase de calcul :
 	\item \textbf{Lues :} l'état courant \texttt{A[IDX(i,j)]} et l'état des quatre voisins (haut, bas, gauche, droite).
 	\item \textbf{Écrites :} la nouvelle valeur de la cellule dans \texttt{B[IDX(i,j)]}.
 \end{itemize}
-Note : à la fin de chaque pas temporel, les rôles/ponteurs de \texttt{A} et \texttt{B} sont échangés.
+Note : à la fin de chaque pas temporel, les rôles/pointeurs de \texttt{A} et \texttt{B} sont échangés.
 
 \subsection{Potentiel de parallélisation}
-La mise à jour de \texttt{B[IDX(i,j)]} dépend uniquement des valeurs lues dans \texttt{A} (lecture seule pendant l'itération spatiale). Il n'y a donc pas de dépendance entre deux itérations distinctes sur \texttt{i},\texttt{j}. Les boucles spatiales peuvent donc être parallélisées via OpenMP (\texttt{#pragma omp parallel for}) ou distribuées par domaines avec MPI.
+La mise à jour de \texttt{B[IDX(i,j)]} dépend uniquement des valeurs lues dans \texttt{A} (lecture seule pendant l'itération spatiale). Il n'y a donc pas de dépendance entre deux itérations distinctes sur \texttt{i},\texttt{j}. Les boucles spatiales peuvent donc être parallélisées via OpenMP (\texttt{\#pragma omp parallel for}) ou distribuées par domaines avec MPI.
 
 \begin{minted}[frame=single, bgcolor=white, linenos]{python}
 def factorial(n):
@@ -247,8 +249,186 @@ Dans un second temps, nous avons réalisé notre simulation sur une population e
 \end{tabular} \\\\
 
 
-\section{Parallélisation avec OpenMPI}
-\lipsum[5]
+\section{Parallélisation avec Open MPI}
+
+\subsection{Principe de MPI}
+MPI (\textit{Message Passing Interface}) est une bibliothèque permettant de
+programmer des applications parallèles par échange de messages. Open MPI est
+une implémentation libre de cette bibliothèque. Contrairement aux threads
+OpenMP, les processus MPI ne partagent pas leurs variables : chaque processus
+possède sa propre mémoire locale.
+
+Le même programme \texttt{epidemie\_mpi.c} est exécuté par tous les processus.
+Chaque processus travaille cependant sur une partie différente de la grille,
+déterminée grâce à son numéro.
+
+\subsection{Initialisation des processus}
+Les premières primitives MPI utilisées dans le programme sont les quatre
+fonctions essentielles présentées dans le cours :
+
+\begin{lstlisting}
+MPI_Init(&argc, &argv);
+MPI_Comm_rank(MPI_COMM_WORLD, &rang);
+MPI_Comm_size(MPI_COMM_WORLD, &nbproc);
+\end{lstlisting}
+
+\texttt{MPI\_Init} démarre l'environnement MPI.
+\texttt{MPI\_Comm\_rank} place dans \texttt{rang} le numéro unique du processus
+courant et \texttt{MPI\_Comm\_size} place dans \texttt{nbproc} le nombre total
+de processus. Le communicateur \texttt{MPI\_COMM\_WORLD} contient ici tous les
+processus lancés. Les rangs sont numérotés de 0 à \texttt{nbproc - 1}.
+
+À la fin du programme, chaque processus appelle \texttt{MPI\_Finalize} pour
+terminer l'environnement MPI.
+
+\subsection{Découpage horizontal de la grille}
+Dans la version séquentielle, un seul programme possède les $N \times N$
+cellules. Dans la version MPI, nous avons choisi un découpage par blocs de
+lignes. Chaque processus reçoit le même nombre de lignes :
+
+\begin{lstlisting}
+int bloc = N / nbproc;
+int debut = rang * bloc;
+\end{lstlisting}
+
+\texttt{bloc} est le nombre de lignes traitées localement et \texttt{debut}
+est l'indice global de la première ligne du bloc. Le programme vérifie que $N$
+est divisible par le nombre de processus afin que tous les blocs aient la même
+taille.
+
+Pour $N=300$ et quatre processus, la répartition est la suivante :
+
+\begin{center}
+\begin{tabular}{|c|c|}
+	\hline
+	\textbf{Processus} & \textbf{Lignes globales traitées} \\ \hline
+	0 & 0 à 74 \\ \hline
+	1 & 75 à 149 \\ \hline
+	2 & 150 à 224 \\ \hline
+	3 & 225 à 299 \\ \hline
+\end{tabular}
+\end{center}
+
+Ce choix suit le principe du découpage par blocs vu en cours : chaque processus
+effectue indépendamment un calcul local sur une partie des données.
+
+\subsection{Mémoire locale et lignes fantômes}
+Pour déterminer le nouvel état d'une cellule, le programme lit ses quatre
+voisins orthogonaux. Les voisins de gauche et de droite appartiennent toujours
+au même bloc. En revanche, le voisin du haut de la première ligne locale et le
+voisin du bas de la dernière ligne locale peuvent appartenir à un autre
+processus.
+
+Chaque processus alloue donc ses \texttt{bloc} lignes, ainsi que deux lignes
+supplémentaires :
+
+\begin{lstlisting}
+int *A = malloc((size_t)(bloc + 2) * N * sizeof(int));
+int *B = malloc((size_t)(bloc + 2) * N * sizeof(int));
+\end{lstlisting}
+
+\begin{itemize}
+	\item la ligne locale 0 reçoit la frontière du processus précédent ;
+	\item les lignes 1 à \texttt{bloc} sont réellement calculées ;
+	\item la ligne \texttt{bloc + 1} reçoit la frontière du processus suivant.
+\end{itemize}
+
+Ces deux lignes supplémentaires sont appelées lignes fantômes. Elles contiennent
+une copie des données reçues et permettent d'utiliser la même règle de
+propagation que dans la version séquentielle.
+
+\subsection{Placement des premiers individus infectés}
+Les coordonnées des trois premiers individus infectés sont globales. Chaque
+processus vérifie donc si la ligne correspondante appartient à son bloc. Seul
+le processus propriétaire modifie sa grille locale :
+
+\begin{lstlisting}
+if (lignes_infectees[k] >= debut &&
+    lignes_infectees[k] < debut + bloc) {
+    int ligne_locale = lignes_infectees[k] - debut + 1;
+    A[IDX(ligne_locale, colonnes_infectees[k])] = 1;
+}
+\end{lstlisting}
+
+Le décalage de 1 correspond à la ligne fantôme placée au début du tableau.
+
+\subsection{Échange des frontières}
+Avant chaque itération, les processus voisins doivent mettre à jour leurs lignes
+fantômes. Le programme utilise les communications point à point
+\texttt{MPI\_Send} et \texttt{MPI\_Recv} présentées dans le cours.
+
+\begin{lstlisting}
+MPI_Send(&A[IDX(bloc,0)], N, MPI_INT, rang + 1, 0,
+         MPI_COMM_WORLD);
+MPI_Recv(&A[IDX(bloc + 1,0)], N, MPI_INT, rang + 1, 1,
+         MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+\end{lstlisting}
+
+Dans cet exemple, le processus envoie $N$ entiers de sa dernière ligne réelle
+au processus suivant. Il reçoit ensuite $N$ entiers dans sa ligne fantôme du
+bas. Les paramètres indiquent la donnée, le nombre d'éléments, leur type, le
+rang du processus distant, l'étiquette du message et le communicateur.
+
+Les échanges sont organisés en deux étapes :
+
+\begin{enumerate}
+	\item communications entre les processus 0 et 1, 2 et 3, etc. ;
+	\item communications entre les processus 1 et 2, 3 et 4, etc.
+\end{enumerate}
+
+Dans chaque paire, un processus envoie pendant que l'autre reçoit. Cet ordre est
+important car \texttt{MPI\_Recv} attend l'arrivée de la donnée.
+
+\subsection{Calcul local de la propagation}
+Une fois les frontières reçues, tous les processus calculent en parallèle leurs
+propres lignes. La règle de propagation reste identique : une personne saine
+devient infectée si au moins deux de ses quatre voisins sont infectés, une
+personne infectée devient guérie et une personne guérie reste guérie.
+
+\begin{lstlisting}
+for (int i = 1; i <= bloc; i++) {
+    int ligne_globale = debut + i - 1;
+
+    if (ligne_globale != 0 && ligne_globale != N - 1) {
+        for (int j = 1; j < N - 1; j++) {
+            /* Meme calcul que dans la version sequentielle */
+        }
+    }
+}
+\end{lstlisting}
+
+La variable \texttt{ligne\_globale} permet de reconnaître les bords extérieurs
+de la grille. Comme dans la version séquentielle, le tableau \texttt{A} est lu
+et le nouvel état est écrit dans \texttt{B}. Les deux pointeurs sont ensuite
+échangés.
+
+\subsection{Obtention du résultat global}
+À la fin de la simulation, chaque processus compte les individus sains,
+infectés et guéris de son bloc. Ces compteurs locaux sont regroupés avec une
+communication collective :
+
+\begin{lstlisting}
+MPI_Reduce(compteurs_locaux, compteurs_globaux, 3,
+           MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+\end{lstlisting}
+
+\texttt{MPI\_Reduce} additionne les trois compteurs de tous les processus grâce
+à l'opération \texttt{MPI\_SUM}. Le résultat est placé dans
+\texttt{compteurs\_globaux} sur le processus de rang 0. Une seconde réduction
+additionne les temps locaux. Seul le processus 0 affiche les résultats finaux.
+
+\subsection{Compilation et exécution}
+Le programme est compilé avec \texttt{mpicc}, qui ajoute automatiquement les
+bibliothèques MPI nécessaires :
+
+\begin{lstlisting}[numbers=none]
+mpicc epidemie_mpi.c -o epidemie_mpi
+mpirun -np 4 ./epidemie_mpi
+\end{lstlisting}
+
+L'option \texttt{-np 4} lance ici quatre processus. Ils exécutent tous le même
+programme, mais chacun possède son espace mémoire et calcule son bloc de
+lignes. Le nombre choisi doit diviser $N$ avec le découpage actuel.
 
 
 
