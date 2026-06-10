@@ -22,10 +22,7 @@ int main(int argc, char *argv[])
     MPI_Comm_rank(MPI_COMM_WORLD, &rang);
     MPI_Comm_size(MPI_COMM_WORLD, &nbproc);
 
-    /*
-     * Comme dans le TD, on suppose que chaque processus recoit
-     * le meme nombre de lignes.
-     */
+
     if (N % nbproc != 0) {
         if (rang == 0) {
             printf("Erreur : N doit etre divisible par le nombre de processus\n");

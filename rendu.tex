@@ -3,17 +3,11 @@
 \usepackage[T1]{fontenc}
 \usepackage[french]{babel}
 \usepackage{graphicx}
-\usepackage{lipsum}
 \usepackage{fancyhdr}
 \usepackage{listings}
 \usepackage{xcolor}
-\usepackage{minted}
-\usepackage{amsmath}
 \usepackage{hyperref}
-\usepackage{tcolorbox}
 \usepackage{lmodern}
-\usepackage{xcolor}
-\usepackage{listings}
 
 \definecolor{codegray}{rgb}{0.96,0.96,0.96}
 \lstset{
@@ -56,18 +50,17 @@
 \fancyfoot[L]{\nouppercase{\leftmark}}
 
 \begin{document}
+\pagenumbering{gobble}
 
-% ---- Page de titre ----
 \begin{titlepage}
 	\centering
 	\includegraphics[width=4cm]{logo.png} \\[1cm]
 
-	{\LARGE \textbf{Projet parrallélisme}} \\[0.5cm]
-    
-	{\large Avec l'utilisation d'OpenMP et OpenMPI} \\[1.5cm]
+	{\LARGE \textbf{Projet de calcul parallèle}} \\[0.5cm]
+	{\large Simulation d'une épidémie avec OpenMP et Open MPI} \\[1.5cm]
 
 	\textbf{Auteurs :} \\[0.3cm]
-    BELKADI Farès \\
+	BELKADI Farès \\
 	CHENNOUF Ziyad \\
 	GAYON Mathis \\
 	NADAUD Antonin \\[1cm]
@@ -76,195 +69,210 @@
 	GARCIA Thierry \\[1.5cm]
 
 	\textbf{\today}
-	\\[2cm]
 
 	\vfill
-
-	{\large CY Tech – Ing1 - Electif 1} \\
-
+	{\large CY Tech -- ING1 -- Électif 1}
 \end{titlepage}
 
-% --- page blanche ---
-\newpage
-\thispagestyle{empty}
-\mbox{}
+\clearpage
+\pagenumbering{arabic}
+\renewcommand{\contentsname}{Sommaire}
+\tableofcontents
 
-% ---- Sommaire ----
-\newpage
-\renewcommand{\contentsname}{Sommaire}  
-\tableofcontents 
-
-% ---- introduction --- 
 \newpage
 \section{Introduction}
-\lipsum[1]
 
-\begin{equation}
-	E = mc^2
-	\label{eq:einstein}
-\end{equation}
+Ce projet étudie la parallélisation d'une simulation simplifiée de propagation
+d'une épidémie. La population est représentée par une grille carrée de
+$N \times N$ cellules. Chaque cellule correspond à une personne dont l'état
+vaut 0 si elle est saine, 1 si elle est infectée et 2 si elle est guérie.
 
+À chaque itération, une personne saine devient infectée si au moins deux de ses
+quatre voisins orthogonaux sont infectés. Une personne infectée devient guérie
+à l'itération suivante, tandis qu'une personne guérie conserve son état. Trois
+personnes infectées sont placées au centre de la grille au début de la
+simulation.
 
-
-
-
-
-
-
-\section{Compréhension séquentielle}
-
-\lipsum[2]
-\newpage
-
-\section{Compréhension du code séquentiel}
-
-\subsection{Compilation et exécution}
-Le code séquentiel fourni a été compilé et exécuté avec succès. Cette exécution fournit le temps d'exécution de référence, nécessaire pour mesurer le gain de performance (\textit{speedup}) des versions parallèles.
-
-\subsection{Boucle principale de calcul}
-La boucle temporelle principale est \texttt{for (int it = 0; it < ITER; ++it)}. À l'intérieur se trouve une double boucle spatiale (indices \texttt{i} et \texttt{j}, de 1 à $N-1$) qui met à jour les cellules de la grille à chaque itération.
-
-\subsection{Données lues et écrites}
-Durant la phase de calcul :
+L'objectif est d'abord de comprendre les dépendances du programme séquentiel,
+puis de proposer deux versions parallèles :
 \begin{itemize}
-	\item \textbf{Lues :} l'état courant \texttt{A[IDX(i,j)]} et l'état des quatre voisins (haut, bas, gauche, droite).
-	\item \textbf{Écrites :} la nouvelle valeur de la cellule dans \texttt{B[IDX(i,j)]}.
+	\item une version OpenMP utilisant plusieurs threads sur une mémoire partagée ;
+	\item une version Open MPI utilisant plusieurs processus et des échanges de
+	messages.
 \end{itemize}
-Note : à la fin de chaque pas temporel, les rôles/pointeurs de \texttt{A} et \texttt{B} sont échangés.
 
-\subsection{Potentiel de parallélisation}
-La mise à jour de \texttt{B[IDX(i,j)]} dépend uniquement des valeurs lues dans \texttt{A} (lecture seule pendant l'itération spatiale). Il n'y a donc pas de dépendance entre deux itérations distinctes sur \texttt{i},\texttt{j}. Les boucles spatiales peuvent donc être parallélisées via OpenMP (\texttt{\#pragma omp parallel for}) ou distribuées par domaines avec MPI.
+\section{Version séquentielle}
 
-\begin{minted}[frame=single, bgcolor=white, linenos]{python}
-def factorial(n):
-	if n == 0:
-    	return 1
-	else:
-    	return n * factorial(n-1)
+\subsection{Représentation des données}
 
-print(factorial(5))
-\end{minted}
+La grille est stockée dans un tableau à une dimension. La macro
+\texttt{IDX(i,j)} transforme les coordonnées $(i,j)$ en un indice linéaire :
 
-\subsection{Test}
+\begin{lstlisting}
+#define IDX(i,j) ((i)*N + (j))
+\end{lstlisting}
 
-\begin{tcolorbox}[colback=gray!20, colframe=black, colframe=white,sharp corners]
-\textbf{Ceci est une boîte} avec un fond gris clair et un titre qui reprend la numérotation de la section. \par
-\hspace{2em}  \lipsum[1]
+Deux tableaux de même taille sont utilisés. Le tableau \texttt{A} contient
+l'état courant de la population et le tableau \texttt{B} reçoit l'état de
+l'itération suivante. Ce double stockage évite qu'une cellule déjà mise à jour
+modifie le calcul de ses voisines pendant la même itération.
 
-\end{tcolorbox}
+\subsection{Boucle principale}
 
-\par
-\vspace{1em}
+La simulation répète le calcul pendant \texttt{ITER} itérations. Seules les
+cellules internes sont mises à jour, car les bords ne possèdent pas quatre
+voisins.
 
-\indent \textbf{Test aa} \lipsum[2] \par
-
-\begin{minted}[frame=single, bgcolor=white, linenos]{python}
-def factorial(n):
-	if n == 0:
-    	return 1
-	else:
-    	return n * factorial(n-1)
-
-print(factorial(5))
-\end{minted}
-
-\subsection{Détails techniques}
-\lipsum[3]
-
-
-
-
-
-
-\section{Parallélisation avec OpenMP}
-
-\subsection{Modifications du code}
-Afin de réaliser notre parallélisation, nous utilisons les directives de la bibliothèque \textbf{omp.h}.
-Nous avons identifié les boucles parallélisables de notre code en amont afin d'éviter des résultats incohérents. Voici ci-dessous les parties du code ayant été modifiées :
-\begin{minted}[frame=single, bgcolor=white, linenos]{c}
-// Boucle de remplissage des tableaux                                       
-#pragma omp parallel for
-for(int i=0;i<N;i++) {
-    for(int j=0;j<N;j++) {
-        A[IDX(i,j)] = 0;
-        B[IDX(i,j)] = 0;
+\begin{lstlisting}
+for (int it = 0; it < ITER; it++) {
+    for (int i = 1; i < N - 1; i++) {
+        for (int j = 1; j < N - 1; j++) {
+            /* Lecture dans A et ecriture dans B */
+        }
     }
-}
-\end{minted}
-\begin{minted}[frame=single, bgcolor=white, linenos]{c}
-// Boucle principale de traitement
-// On boucle ITER fois
-for(int it=0; it<ITER; it++) {
-    // On boucle sur une dimension du tableau ie N fois
-    #pragma omp parallel for
-    for(int i=1;i<N-1;i++) {
 
-    ...
-
-    // On inverse A et B pour que A soit le tableau final
     int *tmp = A;
     A = B;
     B = tmp;
 }
-\end{minted}
-\begin{minted}[frame=single, bgcolor=white, linenos]{c}
-// Première dimension du comptage des individus
-#pragma omp parallel for reduction(+:c0,c1,c2)
-for(int i=0;i<N;i++) {
+\end{lstlisting}
 
-    // Deuxième dimension du parcours
-    for(int j=0;j<N;j++) {
-        if(A[IDX(i,j)] == 0) c0++;
-        else if(A[IDX(i,j)] == 1) c1++;
+Pour une cellule donnée, le programme lit uniquement \texttt{A[IDX(i,j)]} et
+ses quatre voisins. Il écrit le résultat dans une position distincte de
+\texttt{B}. Les calculs des cellules d'une même itération sont donc
+indépendants. Cette propriété rend possible la parallélisation de la boucle
+portant sur les lignes.
+
+\subsection{Résultat de référence}
+
+Après la dernière itération, le programme compte les personnes saines,
+infectées et guéries. Ce comptage sert à vérifier les versions parallèles :
+pour les mêmes valeurs de $N$ et de \texttt{ITER}, elles doivent produire les
+mêmes compteurs que la version séquentielle.
+
+\section{Parallélisation avec OpenMP}
+
+\subsection{Principe}
+
+OpenMP repose sur une mémoire partagée. Tous les threads accèdent donc aux
+mêmes tableaux \texttt{A} et \texttt{B}. La parallélisation est ajoutée avec
+des directives \texttt{\#pragma omp parallel for} devant les boucles dont les
+itérations sont indépendantes.
+
+\subsection{Boucles parallélisées}
+
+Chaque case des tableaux est écrite une seule fois. Leur initialisation peut
+donc être répartie entre les threads :
+
+\begin{lstlisting}
+#pragma omp parallel for
+for (int i = 0; i < N; i++) {
+    for (int j = 0; j < N; j++) {
+        A[IDX(i,j)] = 0;
+        B[IDX(i,j)] = 0;
+    }
+}
+\end{lstlisting}
+
+La boucle principale est parallélisée sur les lignes. À chaque itération,
+\texttt{A} reste en lecture seule pendant que les threads écrivent dans des
+lignes différentes de \texttt{B}.
+
+\begin{lstlisting}
+for (int it = 0; it < ITER; it++) {
+    #pragma omp parallel for
+    for (int i = 1; i < N - 1; i++) {
+        for (int j = 1; j < N - 1; j++) {
+            /* Regle de propagation */
+        }
+    }
+
+    int *tmp = A;
+    A = B;
+    B = tmp;
+}
+\end{lstlisting}
+
+Enfin, le comptage utilise une réduction. Chaque thread calcule des compteurs
+locaux, puis OpenMP les additionne dans \texttt{c0}, \texttt{c1} et
+\texttt{c2}. Sans réduction, plusieurs threads pourraient modifier
+simultanément les mêmes variables.
+
+\begin{lstlisting}
+#pragma omp parallel for reduction(+:c0,c1,c2)
+for (int i = 0; i < N; i++) {
+    for (int j = 0; j < N; j++) {
+        if (A[IDX(i,j)] == 0) c0++;
+        else if (A[IDX(i,j)] == 1) c1++;
         else c2++;
     }
 }
-\end{minted}
-La boucle du premier cadre permet seulement de remplir le tableau utilisé pour représenter la population étudiée. On peut paralléliser cette opération car l'ordre de remplissage du tableau n'importe pas.
-\\\\
-La boucle du second cadre correspond à l'opération de propagation de la maladie. La parallélisation est rendue possible par l'utilisation de deux tableaux différents. Le tableau A sert à la lecture des valeurs tandis que le tableau B sert à l'écriture des valeurs. Ainsi, il n'y a aucun conflitdans l'ordre de mise à jour des valeurs.
-\\\\
-Enfin, le dernier cadre agit sur le calcul du nombre de personnes saines, infectées et guéries. On utilise une réduction pour que les threads somment les valeurs à la fin de la parallélisation.
-En effet, sans la directive de réduction, on observe des individus manquants dans le résultat.
+\end{lstlisting}
 
-\subsection{Temps d'exécution et speedup}
-Dans un premier temps, nous avons réalisé des mesures sur une population relativement faible de 4 000 000 de personnes. Cela nous permet d'avoir une idée de l'efficacité de la parallélisation sur de petites populations. Le nombre d'itérations est fixé à 500, on pourrait donc dire que l'on étudie l'épidémie sur 500 jours.\\\\
-\begin{tabular}{|l|c|r|} %create a table 
-    \hline
-    \textbf{Threads}&\textbf{Temps d'exécution}&\textbf{Speedup}\\ \hline
-    1 & 9,333s & 1\\ \hline
-    2 & 4,998s & 1,867\\ \hline
-    4 & 6,076s & 1,536\\ \hline
-    8 & 3,003s & 3,108\\ \hline
-\end{tabular} \\\\
+\subsection{Compilation et exécution}
 
-Dans un second temps, nous avons réalisé notre simulation sur une population environ égale à celle de la France (69 089 340). Ainsi, nous voyons quel temps une simulation prendrait à l'échelle du pays, bien que le modèle de propagation soit très simple.\\\\
-\begin{tabular}{|l|c|r|} %create a table 
-    \hline
-    \textbf{Threads}&\textbf{Temps d'exécution}&\textbf{Speedup}\\ \hline
-    1 & 2min 33s & 1\\ \hline
-    2 & 1min 30s & 1,7\\ \hline
-    4 & 1min 17s & 1,99\\ \hline
-    8 & 48s & 3,19\\ \hline
-\end{tabular} \\\\
+\begin{lstlisting}[numbers=none]
+gcc -fopenmp epidemie_omp.c -o epidemie_omp
+./epidemie_omp
+\end{lstlisting}
 
+Le nombre de threads est fixé dans le programme :
+
+\begin{lstlisting}[numbers=none]
+omp_set_num_threads(8);
+\end{lstlisting}
+
+Le temps écoulé est mesuré avec \texttt{omp\_get\_wtime}.
+
+\subsection{Mesures obtenues}
+
+L'accélération, ou \textit{speedup}, est calculée par
+$S(p)=T(1)/T(p)$, où $p$ est le nombre de threads.
+
+Le premier test utilise $N=2000$, soit 4 000 000 de cellules, et
+\texttt{ITER=500}.
+
+\begin{center}
+\begin{tabular}{|c|c|c|}
+	\hline
+	\textbf{Threads} & \textbf{Temps} & \textbf{Accélération} \\ \hline
+	1 & 9,333 s & 1,000 \\ \hline
+	2 & 4,998 s & 1,867 \\ \hline
+	4 & 6,076 s & 1,536 \\ \hline
+	8 & 3,003 s & 3,108 \\ \hline
+\end{tabular}
+\end{center}
+
+Le second test utilise $N=8312$, soit 69 089 344 cellules, et
+\texttt{ITER=500}. Cette taille est proche de la population française et sert
+ici uniquement d'ordre de grandeur.
+
+\begin{center}
+\begin{tabular}{|c|c|c|}
+	\hline
+	\textbf{Threads} & \textbf{Temps} & \textbf{Accélération} \\ \hline
+	1 & 2 min 33 s & 1,00 \\ \hline
+	2 & 1 min 30 s & 1,70 \\ \hline
+	4 & 1 min 17 s & 1,99 \\ \hline
+	8 & 48 s & 3,19 \\ \hline
+\end{tabular}
+\end{center}
+
+Dans les deux tests, huit threads donnent le meilleur temps. L'accélération
+n'est cependant pas proportionnelle au nombre de threads. Le résultat à quatre
+threads sur la petite grille est même moins bon qu'à deux threads. Cela peut
+s'expliquer par le coût de création et de synchronisation des threads, par le
+partage de la bande passante mémoire et par la variabilité des mesures.
 
 \section{Parallélisation avec Open MPI}
 
-\subsection{Principe de MPI}
-MPI (\textit{Message Passing Interface}) est une bibliothèque permettant de
-programmer des applications parallèles par échange de messages. Open MPI est
-une implémentation libre de cette bibliothèque. Contrairement aux threads
-OpenMP, les processus MPI ne partagent pas leurs variables : chaque processus
-possède sa propre mémoire locale.
+\subsection{Mémoire distribuée et initialisation}
 
-Le même programme \texttt{epidemie\_mpi.c} est exécuté par tous les processus.
-Chaque processus travaille cependant sur une partie différente de la grille,
-déterminée grâce à son numéro.
-
-\subsection{Initialisation des processus}
-Les premières primitives MPI utilisées dans le programme sont les quatre
-fonctions essentielles présentées dans le cours :
+MPI (\textit{Message Passing Interface}) permet de programmer plusieurs
+processus qui possèdent chacun leur propre mémoire. Open MPI est
+l'implémentation utilisée pour compiler et lancer le programme. Tous les
+processus exécutent \texttt{epidemie\_mpi.c}, mais chacun travaille sur une
+partie différente de la grille.
 
 \begin{lstlisting}
 MPI_Init(&argc, &argv);
@@ -273,35 +281,29 @@ MPI_Comm_size(MPI_COMM_WORLD, &nbproc);
 \end{lstlisting}
 
 \texttt{MPI\_Init} démarre l'environnement MPI.
-\texttt{MPI\_Comm\_rank} place dans \texttt{rang} le numéro unique du processus
-courant et \texttt{MPI\_Comm\_size} place dans \texttt{nbproc} le nombre total
-de processus. Le communicateur \texttt{MPI\_COMM\_WORLD} contient ici tous les
-processus lancés. Les rangs sont numérotés de 0 à \texttt{nbproc - 1}.
+\texttt{MPI\_Comm\_rank} fournit le numéro du processus courant et
+\texttt{MPI\_Comm\_size} le nombre total de processus. Le communicateur
+\texttt{MPI\_COMM\_WORLD} contient tous les processus lancés. L'environnement
+est terminé par \texttt{MPI\_Finalize}.
 
-À la fin du programme, chaque processus appelle \texttt{MPI\_Finalize} pour
-terminer l'environnement MPI.
+\subsection{Découpage de la grille}
 
-\subsection{Découpage horizontal de la grille}
-Dans la version séquentielle, un seul programme possède les $N \times N$
-cellules. Dans la version MPI, nous avons choisi un découpage par blocs de
-lignes. Chaque processus reçoit le même nombre de lignes :
+La grille est découpée horizontalement en blocs de lignes :
 
 \begin{lstlisting}
 int bloc = N / nbproc;
 int debut = rang * bloc;
 \end{lstlisting}
 
-\texttt{bloc} est le nombre de lignes traitées localement et \texttt{debut}
-est l'indice global de la première ligne du bloc. Le programme vérifie que $N$
-est divisible par le nombre de processus afin que tous les blocs aient la même
-taille.
-
-Pour $N=300$ et quatre processus, la répartition est la suivante :
+Le processus de rang \texttt{rang} traite \texttt{bloc} lignes à partir de la
+ligne globale \texttt{debut}. Le programme impose que $N$ soit divisible par
+le nombre de processus. Pour $N=300$ et quatre processus, chaque processus
+traite 75 lignes.
 
 \begin{center}
 \begin{tabular}{|c|c|}
 	\hline
-	\textbf{Processus} & \textbf{Lignes globales traitées} \\ \hline
+	\textbf{Processus} & \textbf{Lignes globales} \\ \hline
 	0 & 0 à 74 \\ \hline
 	1 & 75 à 149 \\ \hline
 	2 & 150 à 224 \\ \hline
@@ -309,17 +311,13 @@ Pour $N=300$ et quatre processus, la répartition est la suivante :
 \end{tabular}
 \end{center}
 
-Ce choix suit le principe du découpage par blocs vu en cours : chaque processus
-effectue indépendamment un calcul local sur une partie des données.
+Les trois personnes initialement infectées sont placées uniquement par le
+processus qui possède leurs lignes globales.
 
-\subsection{Mémoire locale et lignes fantômes}
-Pour déterminer le nouvel état d'une cellule, le programme lit ses quatre
-voisins orthogonaux. Les voisins de gauche et de droite appartiennent toujours
-au même bloc. En revanche, le voisin du haut de la première ligne locale et le
-voisin du bas de la dernière ligne locale peuvent appartenir à un autre
-processus.
+\subsection{Lignes fantômes}
 
-Chaque processus alloue donc ses \texttt{bloc} lignes, ainsi que deux lignes
+La première et la dernière ligne d'un bloc dépendent de cellules appartenant
+aux processus voisins. Chaque processus alloue donc deux lignes
 supplémentaires :
 
 \begin{lstlisting}
@@ -329,33 +327,17 @@ int *B = malloc((size_t)(bloc + 2) * N * sizeof(int));
 
 \begin{itemize}
 	\item la ligne locale 0 reçoit la frontière du processus précédent ;
-	\item les lignes 1 à \texttt{bloc} sont réellement calculées ;
+	\item les lignes 1 à \texttt{bloc} contiennent le bloc réellement calculé ;
 	\item la ligne \texttt{bloc + 1} reçoit la frontière du processus suivant.
 \end{itemize}
 
-Ces deux lignes supplémentaires sont appelées lignes fantômes. Elles contiennent
-une copie des données reçues et permettent d'utiliser la même règle de
-propagation que dans la version séquentielle.
-
-\subsection{Placement des premiers individus infectés}
-Les coordonnées des trois premiers individus infectés sont globales. Chaque
-processus vérifie donc si la ligne correspondante appartient à son bloc. Seul
-le processus propriétaire modifie sa grille locale :
-
-\begin{lstlisting}
-if (lignes_infectees[k] >= debut &&
-    lignes_infectees[k] < debut + bloc) {
-    int ligne_locale = lignes_infectees[k] - debut + 1;
-    A[IDX(ligne_locale, colonnes_infectees[k])] = 1;
-}
-\end{lstlisting}
-
-Le décalage de 1 correspond à la ligne fantôme placée au début du tableau.
+Ces lignes fantômes donnent accès aux voisins verticaux sans partager
+directement la mémoire des autres processus.
 
 \subsection{Échange des frontières}
-Avant chaque itération, les processus voisins doivent mettre à jour leurs lignes
-fantômes. Le programme utilise les communications point à point
-\texttt{MPI\_Send} et \texttt{MPI\_Recv} présentées dans le cours.
+
+Avant chaque itération, les processus voisins échangent leurs lignes extrêmes
+avec \texttt{MPI\_Send} et \texttt{MPI\_Recv}.
 
 \begin{lstlisting}
 MPI_Send(&A[IDX(bloc,0)], N, MPI_INT, rang + 1, 0,
@@ -364,97 +346,109 @@ MPI_Recv(&A[IDX(bloc + 1,0)], N, MPI_INT, rang + 1, 1,
          MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 \end{lstlisting}
 
-Dans cet exemple, le processus envoie $N$ entiers de sa dernière ligne réelle
-au processus suivant. Il reçoit ensuite $N$ entiers dans sa ligne fantôme du
-bas. Les paramètres indiquent la donnée, le nombre d'éléments, leur type, le
-rang du processus distant, l'étiquette du message et le communicateur.
+Les communications sont organisées en deux phases : d'abord entre les paires
+0--1, 2--3, etc., puis entre les paires 1--2, 3--4, etc. Dans chaque paire,
+l'ordre des envois et des réceptions dépend de la parité du rang. Cette
+organisation évite que deux processus exécutent en même temps un envoi bloquant
+en attendant l'autre.
 
-Les échanges sont organisés en deux étapes :
+Une fois les frontières reçues, chaque processus applique la règle de
+propagation à ses lignes locales. Les pointeurs \texttt{A} et \texttt{B} sont
+ensuite échangés localement, comme dans la version séquentielle.
 
-\begin{enumerate}
-	\item communications entre les processus 0 et 1, 2 et 3, etc. ;
-	\item communications entre les processus 1 et 2, 3 et 4, etc.
-\end{enumerate}
+\subsection{Réduction des résultats}
 
-Dans chaque paire, un processus envoie pendant que l'autre reçoit. Cet ordre est
-important car \texttt{MPI\_Recv} attend l'arrivée de la donnée.
-
-\subsection{Calcul local de la propagation}
-Une fois les frontières reçues, tous les processus calculent en parallèle leurs
-propres lignes. La règle de propagation reste identique : une personne saine
-devient infectée si au moins deux de ses quatre voisins sont infectés, une
-personne infectée devient guérie et une personne guérie reste guérie.
-
-\begin{lstlisting}
-for (int i = 1; i <= bloc; i++) {
-    int ligne_globale = debut + i - 1;
-
-    if (ligne_globale != 0 && ligne_globale != N - 1) {
-        for (int j = 1; j < N - 1; j++) {
-            /* Meme calcul que dans la version sequentielle */
-        }
-    }
-}
-\end{lstlisting}
-
-La variable \texttt{ligne\_globale} permet de reconnaître les bords extérieurs
-de la grille. Comme dans la version séquentielle, le tableau \texttt{A} est lu
-et le nouvel état est écrit dans \texttt{B}. Les deux pointeurs sont ensuite
-échangés.
-
-\subsection{Obtention du résultat global}
-À la fin de la simulation, chaque processus compte les individus sains,
-infectés et guéris de son bloc. Ces compteurs locaux sont regroupés avec une
-communication collective :
+Chaque processus compte les états présents dans son bloc. Une réduction
+additionne ensuite les compteurs locaux sur le processus 0 :
 
 \begin{lstlisting}
 MPI_Reduce(compteurs_locaux, compteurs_globaux, 3,
            MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 \end{lstlisting}
 
-\texttt{MPI\_Reduce} additionne les trois compteurs de tous les processus grâce
-à l'opération \texttt{MPI\_SUM}. Le résultat est placé dans
-\texttt{compteurs\_globaux} sur le processus de rang 0. Une seconde réduction
-additionne les temps locaux. Seul le processus 0 affiche les résultats finaux.
+Une seconde réduction est utilisée pour les temps locaux. Seul le processus 0
+affiche les résultats, ce qui évite plusieurs affichages identiques.
 
 \subsection{Compilation et exécution}
-Le programme est compilé avec \texttt{mpicc}, qui ajoute automatiquement les
-bibliothèques MPI nécessaires :
 
 \begin{lstlisting}[numbers=none]
 mpicc epidemie_mpi.c -o epidemie_mpi
 mpirun -np 4 ./epidemie_mpi
 \end{lstlisting}
 
-L'option \texttt{-np 4} lance ici quatre processus. Ils exécutent tous le même
-programme, mais chacun possède son espace mémoire et calcule son bloc de
-lignes. Le nombre choisi doit diviser $N$ avec le découpage actuel.
+L'option \texttt{-np 4} lance quatre processus. Le découpage actuel impose que
+le nombre de processus divise $N$.
 
+\section{Analyse comparative}
 
+\subsection{Différences entre OpenMP et MPI}
 
+\begin{center}
+\begin{tabular}{|l|c|c|}
+	\hline
+	\textbf{Caractéristique} & \textbf{OpenMP} & \textbf{MPI} \\ \hline
+	Unité parallèle & Thread & Processus \\ \hline
+	Mémoire & Partagée & Distribuée \\ \hline
+	Répartition & Boucles & Blocs de lignes \\ \hline
+	Communication & Variables communes & Messages \\ \hline
+	Résultat global & Réduction OpenMP & \texttt{MPI\_Reduce} \\ \hline
+\end{tabular}
+\end{center}
 
+OpenMP demande peu de modifications, car les threads accèdent directement à la
+grille complète. MPI nécessite un découpage explicite des données, des lignes
+fantômes et des communications entre processus. En contrepartie, MPI peut
+fonctionner sur plusieurs machines, tandis qu'OpenMP est limité à la mémoire
+partagée d'une machine.
 
-\section{Analyse des résultats}
+\subsection{Validation et limites des mesures}
 
-\lipsum[5]
-\newpage
+La première vérification porte sur les compteurs finaux. À paramètres
+identiques, les trois versions doivent produire le même nombre de personnes
+saines, infectées et guéries. Cette comparaison permet de détecter une erreur
+de synchronisation, de réduction ou d'échange de frontière.
+
+Les tableaux précédents permettent d'analyser OpenMP, mais ils ne permettent
+pas encore de comparer directement OpenMP et MPI. Les mesures OpenMP ont été
+réalisées avec 500 itérations et des grilles de taille 2000 ou 8312, tandis que
+la version MPI utilise par défaut $N=300$ et 200 itérations. Une comparaison
+équitable exige la même grille, le même nombre d'itérations, la même machine et
+plusieurs répétitions pour chaque nombre de threads ou de processus.
+
+La mesure du temps MPI pourrait également être améliorée. Le programme utilise
+\texttt{clock()} et affiche la moyenne des temps locaux. Pour représenter la
+durée réellement perçue, il serait préférable de mesurer le temps écoulé et de
+retenir le temps du processus le plus lent, puisque l'exécution globale dépend
+de sa terminaison.
 
 \section{Conclusion}
 
-\lipsum[5]
+Le programme séquentiel se parallélise naturellement parce que toutes les
+cellules d'une itération lisent l'ancien tableau \texttt{A} et écrivent dans le
+nouveau tableau \texttt{B}. OpenMP exploite cette indépendance en répartissant
+les lignes entre plusieurs threads et en utilisant une réduction pour les
+compteurs. Les mesures montrent un gain de temps, avec une meilleure
+performance observée à huit threads, mais une accélération non linéaire.
+
+La version MPI applique la même règle de calcul dans un modèle à mémoire
+distribuée. La grille est découpée en blocs horizontaux et les processus
+échangent leurs frontières avant chaque itération. Les résultats locaux sont
+ensuite réunis avec \texttt{MPI\_Reduce}.
+
+Les deux approches répondent donc au même objectif avec des modèles différents.
+La suite logique du travail consiste à appliquer un protocole de mesure commun
+aux trois versions afin de comparer leurs performances sans changer la taille
+du problème.
 
 \newpage
-
-\section{Bibliographie}
-
-Voici la liste:
-
-\vspace{1em}
+\section{Références}
 
 \begin{itemize}
-	\item \href{https://www.insee.fr/fr/statistiques/8721456}{INSEE}
-	\item \href{https://www.google.com}{Google}
-	\item \href{https://www.wikipedia.org}{Wikipedia}
+	\item Thierry Garcia, \textit{Initiation au calcul parallèle intensif},
+	supports de cours CM4 (OpenMP) et CM5 (MPI), CY Tech, 2026.
+	\item INSEE, données démographiques utilisées comme ordre de grandeur pour
+	la population française :
+	\href{https://www.insee.fr/fr/statistiques/8721456}{insee.fr}.
 \end{itemize}
 
 \end{document}
